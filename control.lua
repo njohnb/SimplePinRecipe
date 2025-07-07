@@ -1,3 +1,8 @@
+local function add_ingredient_row(parent, sprite, name, amount)
+    local flow = parent.add{type = "flow", direction = "horizontal"}
+    flow.add{type = "sprite", sprite = sprite}
+    flow.add{type = "label", caption = string.format("%s x%s", name, amount)}
+end
 local function create_recipe_ui(player)
     local gui = player.gui.screen
     if gui.recipe_pin then return end
@@ -9,9 +14,7 @@ local function create_recipe_ui(player)
         direction = "vertical"
     }
     frame.auto_center = true
-    frame.style.size = {250, 200}
-    frame.style.padding = 12
-
+    frame.style.padding = 8
     -- drag handle
     local drag_handle = frame.add{
         type = "flow",
@@ -24,13 +27,6 @@ local function create_recipe_ui(player)
         style = "draggable_space_header",
         style_mods = {horizontally_stretchable = true, height = 24}
     }
-
-    drag_handle.add{
-        type = "empty-widget",  -- Filler to push the button to the right
-        style = "draggable_space_header",
-        style_mods = { horizontally_stretchable = true }
-    }
-
     drag_handle.add{
         type = "sprite-button",
         name = "recipe_pin_close_button",
@@ -56,12 +52,14 @@ local function clear_and_display_recipe(frame, recipe)
 
     content.add{type = "label", caption = "Inputs:"}
     for _, ing in ipairs(recipe.ingredients) do
-        content.add{type = "label", caption = string.format("- %s x%d", ing.name, ing.amount)}
+        local sprite = ing.type == "fluid" and ("fluid/" .. ing.name) or ("item/" .. ing.name)
+        add_ingredient_row(content, sprite, ing.name, ing.amount)
     end
 
     content.add{type = "label", caption = "Outputs:"}
     for _, out in ipairs(recipe.products) do
-        content.add{type = "label", caption = string.format("- %s x%.2f", out.name, out.amount)}
+        local sprite = out.type == "fluid" and ("fluid/" .. out.name) or ("item/" .. out.name)
+        add_ingredient_row(content, sprite, out.name, out.amount)
     end
 
     content.add{type = "label", caption = "Craft time: " .. recipe.energy .. "s"}
@@ -78,9 +76,7 @@ local function show_recipe_preview(player, recipe)
         direction = "vertical"
     }
     frame.auto_center = true
-    frame.style.size = {300, 250}
-    frame.style.padding = 12
-
+    frame.style.padding = 8
     -- Header bar
     local drag_handle = frame.add{
         type = "flow",
@@ -105,12 +101,14 @@ local function show_recipe_preview(player, recipe)
 
     content.add{type = "label", caption = "Inputs:"}
     for _, ing in ipairs(recipe.ingredients) do
-        content.add{type = "label", caption = string.format("- %s x%d", ing.name, ing.amount)}
+        local sprite = ing.type == "fluid" and ("fluid/" .. ing.name) or ("item/" .. ing.name)
+        add_ingredient_row(content, sprite, ing.name, ing.amount)
     end
 
     content.add{type = "label", caption = "Outputs:"}
     for _, out in ipairs(recipe.products) do
-        content.add{type = "label", caption = string.format("- %s x%.2f", out.name, out.amount)}
+        local sprite = out.type == "fluid" and ("fluid/" .. out.name) or ("item/" .. out.name)
+        add_ingredient_row(content, sprite, out.name, out.amount)
     end
 
     content.add{type = "label", caption = "Craft time: " .. recipe.energy .. "s"}
@@ -142,7 +140,8 @@ local function open_recipe_picker(player)
         direction = "vertical"
     }
     frame.auto_center = true
-    frame.style.size = {300, 400}
+    frame.style.padding = 8
+    frame.style.maximal_height = 450
 
     local drag_handle = frame.add{
         type = "flow",
@@ -163,17 +162,22 @@ local function open_recipe_picker(player)
         style = "frame_action_button"
     }
 
+    -- 🟩 Scrollable content holder
     local scroll = frame.add{
         type = "scroll-pane",
+        name = "recipe_scroll",
         direction = "vertical"
     }
-    scroll.style.vertically_stretchable = true
-    scroll.style.maximal_height = 350
+    scroll.style.vertically_stretchable = false
+    scroll.style.maximal_height = 350 -- 👈 auto-scroll activates when exceeded
+    scroll.style.minimal_height = 100
+    scroll.style.padding = 4
 
+    -- 🟥 Grid inside scroll-pane
     local grid = scroll.add{
         type = "table",
-        column_count = 5,
-        style_mods = { horizontally_stretchable = true }
+        column_count = 10,
+        name = "recipe_grid"
     }
 
 
@@ -213,6 +217,12 @@ script.on_event(defines.events.on_gui_click, function(event)
             create_recipe_ui(player)
             clear_and_display_recipe(player.gui.screen.recipe_pin, recipe)
         end
+        return
+    end
+
+
+    if element.name == "recipe_pin_close_button" then
+        element.parent.parent.destroy()
         return
     end
 
