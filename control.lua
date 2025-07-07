@@ -2,6 +2,11 @@ script.on_init(function()
     global = global or {}  -- usually unnecessary, but ultra safe for updated versions
     global.pinned_recipes = global.pinned_recipes or {}
 end)
+local function ensure_global()
+    global = global or {}
+    global.pinned_recipes = global.pinned_recipes or {}
+end
+
 local function add_ingredient_row(parent, sprite, name, amount)
     local flow = parent.add{type = "flow", direction = "horizontal"}
     flow.add{type = "sprite", sprite = sprite}
@@ -38,9 +43,9 @@ end
 
 
 local function clear_and_display_recipe(frame, recipe)
+
     local content = frame.recipe_content
     content.clear()
-
     if not recipe then
         content.add{type = "label", caption = "No recipe found."}
         return
@@ -64,7 +69,9 @@ local function create_recipe_ui(player, recipe, reuse_frame_name)
     local gui = player.gui.screen
     local unique_name = "recipe_pin_" .. recipe.name .. "_" .. game.tick
 
+
     if not reuse_frame_name then
+        ensure_global()
         global.pinned_recipes = global.pinned_recipes or {}
         for _, entry in ipairs(global.pinned_recipes) do
             if entry.player_index == player.index and entry.frame_name == unique_name then
@@ -287,11 +294,14 @@ script.on_event("open-recipe-picker-hotkey", function(event)
     if player then open_recipe_picker(player) end
 end)
 script.on_event(defines.events.on_gui_click, function(event)
+    ensure_global()
     local element = event.element
     if not (element and element.valid) then return end
 
     local player = game.get_player(event.player_index)
     if not player then return end
+
+    global.pinned_recipes = global.pinned_recipes or {}
 
     if element.name == "recipe_picker_close_button" then
 
@@ -380,6 +390,7 @@ script.on_event(defines.events.on_gui_text_changed, function(event)
     populate_recipe_grid(player, grid, search_text)
 end)
 function get_pinned_entry(player_index, frame_name)
+    ensure_global()
     if not global or not global.pinned_recipes then return nil end
     if not global.pinned_recipes then return nil end
     for _, entry in ipairs(global.pinned_recipes) do
@@ -389,8 +400,7 @@ function get_pinned_entry(player_index, frame_name)
     end
 end
 script.on_event(defines.events.on_gui_location_changed, function(event)
-    if not global or not global.pinned_recipes then return end
-
+    ensure_global()
     local element = event.element
     if not (element and element.valid and element.name:find("recipe_pin_")) then return end
 
@@ -400,7 +410,9 @@ script.on_event(defines.events.on_gui_location_changed, function(event)
         entry.location = element.location
     end
 end)
-script.on_event(defines.events.on_player_created, function(event)
+script.on_event(defines.events.on_player_joined_game, function(event)
+
+    ensure_global()
     local player = game.get_player(event.player_index)
     if not player then return end
 
@@ -415,7 +427,6 @@ script.on_event(defines.events.on_player_created, function(event)
                         frame.location = entry.location
                     end
                     if frame and entry.collapsed then
-                        -- simulate collapsing
                         frame.recipe_content.visible = false
                         frame.recipe_pin_toggle_button.caption = "►"
                         frame.recipe_pin_icon_sprite.visible = true
@@ -425,6 +436,7 @@ script.on_event(defines.events.on_player_created, function(event)
         end
     end
 end)
+
 script.on_event("close-recipe-windows", function(event)
     local player = game.get_player(event.player_index)
     if not player then return end
@@ -447,4 +459,9 @@ script.on_event("close-recipe-windows", function(event)
         remove_escape_guard(player)
     end
 end)
-
+script.on_configuration_changed(function()
+    global.pinned_recipes = global.pinned_recipes or {}
+end)
+script.on_load(function()
+    ensure_global()
+end)
