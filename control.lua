@@ -1,3 +1,7 @@
+script.on_init(function()
+    global = global or {}  -- usually unnecessary, but ultra safe for updated versions
+    global.pinned_recipes = global.pinned_recipes or {}
+end)
 local function add_ingredient_row(parent, sprite, name, amount)
     local flow = parent.add{type = "flow", direction = "horizontal"}
     flow.add{type = "sprite", sprite = sprite}
@@ -11,6 +15,28 @@ local function get_product_sprite(recipe)
     end
     return "utility/questionmark"
 end
+
+local function ensure_escape_guard(player)
+    local gui = player.gui.screen
+    if gui.recipe_escape_guard then return end
+
+    local guard = gui.add{
+        type = "frame",
+        name = "recipe_escape_guard",
+        visible = false  -- hidden!
+    }
+    player.opened = guard
+end
+local function remove_escape_guard(player)
+    local gui = player.gui.screen
+    if gui.recipe_escape_guard then
+        gui.recipe_escape_guard.destroy()
+        player.opened = nil
+    end
+end
+
+
+
 local function clear_and_display_recipe(frame, recipe)
     local content = frame.recipe_content
     content.clear()
@@ -34,18 +60,34 @@ local function clear_and_display_recipe(frame, recipe)
 
     content.add{type = "label", caption = "Craft time: " .. recipe.energy .. "s"}
 end
-local function create_recipe_ui(player, recipe)
+local function create_recipe_ui(player, recipe, reuse_frame_name)
     local gui = player.gui.screen
     local unique_name = "recipe_pin_" .. recipe.name .. "_" .. game.tick
+
+    if not reuse_frame_name then
+        global.pinned_recipes = global.pinned_recipes or {}
+        for _, entry in ipairs(global.pinned_recipes) do
+            if entry.player_index == player.index and entry.frame_name == unique_name then
+                return
+            end
+        end
+
+        table.insert(global.pinned_recipes, {
+            player_index = player.index,
+            recipe_name = recipe.name,
+            frame_name = unique_name,
+            location = nil,  -- let it be set via on_gui_location_changed
+            collapsed = false
+        })
+    end
     local frame = gui.add{
         type = "frame",
         name = unique_name,
         caption = "📌 Pinned Recipe",
         direction = "vertical"
     }
-
-    frame.auto_center = true
     frame.style.padding = 8
+
     -- drag handle
     local drag_handle = frame.add{
         type = "flow",
@@ -87,7 +129,6 @@ local function create_recipe_ui(player, recipe)
 
     -- content holder
     frame.add{type = "flow", name = "recipe_content", direction = "vertical"}
-    player.opened = frame
 
 
 
@@ -125,6 +166,7 @@ local function show_recipe_preview(player, recipe)
     }
     frame.auto_center = true
     frame.style.padding = 8
+
     -- Header bar
     local drag_handle = frame.add{
         type = "flow",
@@ -167,6 +209,7 @@ local function show_recipe_preview(player, recipe)
         caption = "📌 Pin this recipe",
         tags = { recipe = recipe.name }
     }
+    ensure_escape_guard(player)
 end
 
 
@@ -236,18 +279,7 @@ local function open_recipe_picker(player)
     }
     populate_recipe_grid(player, grid, nil)
 
-    for name, recipe in pairs(player.force.recipes) do
-        local sprite = get_product_sprite(recipe)
-
-        grid.add{
-            type = "sprite-button",
-            sprite = sprite,
-            tooltip = recipe.localised_name or name,
-            style = "slot_button",
-            tags = { recipe = name }
-        }
-    end
-
+    ensure_escape_guard(player)
 end
 
 script.on_event("open-recipe-picker-hotkey", function(event)
@@ -262,6 +294,7 @@ script.on_event(defines.events.on_gui_click, function(event)
     if not player then return end
 
     if element.name == "recipe_picker_close_button" then
+
         element.parent.parent.destroy()
         return
     end
@@ -276,7 +309,19 @@ script.on_event(defines.events.on_gui_click, function(event)
 
 
     if element.name == "recipe_pin_close_button" then
-        element.parent.parent.destroy()
+        local frame = element.parent.parent
+        local name = frame.name
+        frame.destroy()
+
+        -- 🗑 Remove from global.pinned_recipes
+        if global.pinned_recipes then
+            for i, entry in ipairs(global.pinned_recipes) do
+                if entry.player_index == player.index and name:find(entry.recipe_name) then
+                    table.remove(global.pinned_recipes, i)
+                    break
+                end
+            end
+        end
         return
     end
     if element.name == "recipe_pin_toggle_button" then
@@ -292,6 +337,16 @@ script.on_event(defines.events.on_gui_click, function(event)
             local icon_sprite = drag_handle.recipe_pin_icon_sprite
             if icon_sprite then
                 icon_sprite.visible = not content.visible
+            end
+
+            -- update collapsed state in globale.pinned_recipes
+            if global.pinned_recipes then
+                for _, entry in ipairs(global.pinned_recipes) do
+                    if entry.player_index == player.index and frame.name:find(entry.recipe_name) then
+                        entry.collapsed = not content.visible
+                        break
+                    end
+                end
             end
         end
         return
@@ -324,3 +379,72 @@ script.on_event(defines.events.on_gui_text_changed, function(event)
     local search_text = element.text
     populate_recipe_grid(player, grid, search_text)
 end)
+function get_pinned_entry(player_index, frame_name)
+    if not global or not global.pinned_recipes then return nil end
+    if not global.pinned_recipes then return nil end
+    for _, entry in ipairs(global.pinned_recipes) do
+        if entry.player_index == player_index and entry.frame_name == frame_name then
+            return entry
+        end
+    end
+end
+script.on_event(defines.events.on_gui_location_changed, function(event)
+    if not global or not global.pinned_recipes then return end
+
+    local element = event.element
+    if not (element and element.valid and element.name:find("recipe_pin_")) then return end
+
+    local player_index = event.player_index
+    local entry = get_pinned_entry(player_index, element.name)
+    if entry then
+        entry.location = element.location
+    end
+end)
+script.on_event(defines.events.on_player_created, function(event)
+    local player = game.get_player(event.player_index)
+    if not player then return end
+
+    if global.pinned_recipes then
+        for _, entry in ipairs(global.pinned_recipes) do
+            if entry.player_index == player.index then
+                local recipe = player.force.recipes[entry.recipe_name]
+                if recipe then
+                    create_recipe_ui(player, recipe, entry.frame_name)
+                    local frame = player.gui.screen[entry.frame_name]
+                    if frame and entry.location then
+                        frame.location = entry.location
+                    end
+                    if frame and entry.collapsed then
+                        -- simulate collapsing
+                        frame.recipe_content.visible = false
+                        frame.recipe_pin_toggle_button.caption = "►"
+                        frame.recipe_pin_icon_sprite.visible = true
+                    end
+                end
+            end
+        end
+    end
+end)
+script.on_event("close-recipe-windows", function(event)
+    local player = game.get_player(event.player_index)
+    if not player then return end
+
+    local gui = player.gui.screen
+
+    local closed_any = false
+
+    if gui.recipe_preview then
+        gui.recipe_preview.destroy()
+        closed_any = true
+    end
+    if gui.recipe_picker then
+        gui.recipe_picker.destroy()
+        closed_any = true
+    end
+
+    -- Remove the guard only if both are now closed
+    if not gui.recipe_preview and not gui.recipe_picker then
+        remove_escape_guard(player)
+    end
+end)
+
