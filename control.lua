@@ -3,6 +3,14 @@ local function add_ingredient_row(parent, sprite, name, amount)
     flow.add{type = "sprite", sprite = sprite}
     flow.add{type = "label", caption = string.format("%s x%s", name, amount)}
 end
+local function get_product_sprite(recipe)
+    local first_product = recipe.products and recipe.products[1]
+    if first_product then
+        local proto_type = first_product.type or "item"
+        return proto_type .. "/" .. first_product.name
+    end
+    return "utility/questionmark"
+end
 local function clear_and_display_recipe(frame, recipe)
     local content = frame.recipe_content
     content.clear()
@@ -45,6 +53,8 @@ local function create_recipe_ui(player, recipe)
     }
     drag_handle.drag_target = frame
 
+
+
     drag_handle.add{
         type = "empty-widget",
         style = "draggable_space_header",
@@ -58,6 +68,22 @@ local function create_recipe_ui(player, recipe)
         tooltip = {"gui.close-instruction"},
     }
 
+    drag_handle.add{
+        type = "button",
+        name = "recipe_pin_toggle_button",
+        caption = "▼",  -- or use "\"►\"" when collapsed
+        style = "frame_action_button",
+        tooltip = "Collapse/Expand"
+    }
+
+    -- 🟦 Add recipe icon (initially hidden since it's expanded at creation)
+    drag_handle.add{
+        type = "sprite",
+        name = "recipe_pin_icon_sprite",
+        sprite = get_product_sprite(recipe),
+        tooltip = recipe.localised_name or recipe.name,
+        visible = false
+    }
 
     -- content holder
     frame.add{type = "flow", name = "recipe_content", direction = "vertical"}
@@ -123,14 +149,7 @@ local function show_recipe_preview(player, recipe)
         tags = { recipe = recipe.name }
     }
 end
-local function get_product_sprite(recipe)
-    local first_product = recipe.products and recipe.products[1]
-    if first_product then
-        local proto_type = first_product.type or "item"
-        return proto_type .. "/" .. first_product.name
-    end
-    return "utility/questionmark"
-end
+
 
 local function open_recipe_picker(player)
     local gui = player.gui.screen
@@ -225,6 +244,23 @@ script.on_event(defines.events.on_gui_click, function(event)
 
     if element.name == "recipe_pin_close_button" then
         element.parent.parent.destroy()
+        return
+    end
+    if element.name == "recipe_pin_toggle_button" then
+        local frame = element.parent.parent
+        local content = frame.recipe_content
+        if content then
+            content.visible = not content.visible
+
+            element.caption = content.visible and "▼" or "►"
+
+            -- Toggle the icon visibility
+            local drag_handle = element.parent  -- since the toggle button is inside the drag handle
+            local icon_sprite = drag_handle.recipe_pin_icon_sprite
+            if icon_sprite then
+                icon_sprite.visible = not content.visible
+            end
+        end
         return
     end
 
