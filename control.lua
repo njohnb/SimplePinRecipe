@@ -12,6 +12,7 @@ local function create_recipe_ui(player)
     frame.style.size = {250, 200}
     frame.style.padding = 12
 
+    -- drag handle
     local drag_handle = frame.add{
         type = "flow",
         direction = "horizontal"
@@ -35,8 +36,6 @@ local function create_recipe_ui(player)
         name = "recipe_pin_close_button",
         sprite = "utility/close_black",
         style = "frame_action_button",
-        hovered_sprite = "utility/close_black",
-        clicked_sprite = "utility/close_black",
         tooltip = {"gui.close-instruction"},
     }
 
@@ -123,6 +122,14 @@ local function show_recipe_preview(player, recipe)
         tags = { recipe = recipe.name }
     }
 end
+local function get_product_sprite(recipe)
+    local first_product = recipe.products and recipe.products[1]
+    if first_product then
+        local proto_type = first_product.type or "item"
+        return proto_type .. "/" .. first_product.name
+    end
+    return "utility/questionmark"
+end
 
 local function open_recipe_picker(player)
     local gui = player.gui.screen
@@ -163,14 +170,25 @@ local function open_recipe_picker(player)
     scroll.style.vertically_stretchable = true
     scroll.style.maximal_height = 350
 
+    local grid = scroll.add{
+        type = "table",
+        column_count = 5,
+        style_mods = { horizontally_stretchable = true }
+    }
+
+
     for name, recipe in pairs(player.force.recipes) do
-        scroll.add{
-            type = "button",
-            caption = recipe.localised_name or name,
-            tags = { recipe = name },
-            style = "button"
+        local sprite = get_product_sprite(recipe)
+
+        grid.add{
+            type = "sprite-button",
+            sprite = sprite,
+            tooltip = recipe.localised_name or name,
+            style = "slot_button",
+            tags = { recipe = name }
         }
     end
+
 end
 
 script.on_event("open-recipe-picker-hotkey", function(event)
