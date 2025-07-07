@@ -3,16 +3,39 @@ local function add_ingredient_row(parent, sprite, name, amount)
     flow.add{type = "sprite", sprite = sprite}
     flow.add{type = "label", caption = string.format("%s x%s", name, amount)}
 end
-local function create_recipe_ui(player)
-    local gui = player.gui.screen
-    if gui.recipe_pin then return end
+local function clear_and_display_recipe(frame, recipe)
+    local content = frame.recipe_content
+    content.clear()
 
+    if not recipe then
+        content.add{type = "label", caption = "No recipe found."}
+        return
+    end
+
+    content.add{type = "label", caption = "Inputs:"}
+    for _, ing in ipairs(recipe.ingredients) do
+        local sprite = ing.type == "fluid" and ("fluid/" .. ing.name) or ("item/" .. ing.name)
+        add_ingredient_row(content, sprite, ing.name, ing.amount)
+    end
+
+    content.add{type = "label", caption = "Outputs:"}
+    for _, out in ipairs(recipe.products) do
+        local sprite = out.type == "fluid" and ("fluid/" .. out.name) or ("item/" .. out.name)
+        add_ingredient_row(content, sprite, out.name, out.amount)
+    end
+
+    content.add{type = "label", caption = "Craft time: " .. recipe.energy .. "s"}
+end
+local function create_recipe_ui(player, recipe)
+    local gui = player.gui.screen
+    local unique_name = "recipe_pin_" .. recipe.name .. "_" .. game.tick
     local frame = gui.add{
         type = "frame",
-        name = "recipe_pin",
+        name = unique_name,
         caption = "📌 Pinned Recipe",
         direction = "vertical"
     }
+
     frame.auto_center = true
     frame.style.padding = 8
     -- drag handle
@@ -39,31 +62,11 @@ local function create_recipe_ui(player)
     -- content holder
     frame.add{type = "flow", name = "recipe_content", direction = "vertical"}
     player.opened = frame
+
+    clear_and_display_recipe(frame, recipe)
 end
 
-local function clear_and_display_recipe(frame, recipe)
-    local content = frame.recipe_content
-    content.clear()
 
-    if not recipe then
-        content.add{type = "label", caption = "No recipe found."}
-        return
-    end
-
-    content.add{type = "label", caption = "Inputs:"}
-    for _, ing in ipairs(recipe.ingredients) do
-        local sprite = ing.type == "fluid" and ("fluid/" .. ing.name) or ("item/" .. ing.name)
-        add_ingredient_row(content, sprite, ing.name, ing.amount)
-    end
-
-    content.add{type = "label", caption = "Outputs:"}
-    for _, out in ipairs(recipe.products) do
-        local sprite = out.type == "fluid" and ("fluid/" .. out.name) or ("item/" .. out.name)
-        add_ingredient_row(content, sprite, out.name, out.amount)
-    end
-
-    content.add{type = "label", caption = "Craft time: " .. recipe.energy .. "s"}
-end
 
 local function show_recipe_preview(player, recipe)
     local gui = player.gui.screen
@@ -214,8 +217,7 @@ script.on_event(defines.events.on_gui_click, function(event)
     if element.name == "recipe_preview_pin_button" then
         local recipe = player.force.recipes[element.tags.recipe]
         if recipe then
-            create_recipe_ui(player)
-            clear_and_display_recipe(player.gui.screen.recipe_pin, recipe)
+            create_recipe_ui(player, recipe)
         end
         return
     end
