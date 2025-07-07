@@ -89,9 +89,28 @@ local function create_recipe_ui(player, recipe)
     frame.add{type = "flow", name = "recipe_content", direction = "vertical"}
     player.opened = frame
 
+
+
     clear_and_display_recipe(frame, recipe)
 end
 
+local function populate_recipe_grid(player, grid, filter)
+    grid.clear()
+    for name, recipe in pairs(player.force.recipes) do
+        local localized_name = recipe.localised_name or name
+        if not filter or string.find(name:lower(), filter:lower(), 1, true) or
+                (type(localized_name) == "string" and string.find(localized_name:lower(), filter:lower(), 1, true)) then
+            local sprite = get_product_sprite(recipe)
+            grid.add{
+                type = "sprite-button",
+                sprite = sprite,
+                tooltip = localized_name,
+                style = "slot_button",
+                tags = { recipe = name }
+            }
+        end
+    end
+end
 
 
 local function show_recipe_preview(player, recipe)
@@ -165,6 +184,20 @@ local function open_recipe_picker(player)
     frame.style.padding = 8
     frame.style.maximal_height = 450
 
+    -- search bar
+    local search_flow = frame.add{
+        type = "flow",
+        direction = "horizontal"
+    }
+    search_flow.add{
+        type = "label",
+        caption = "Search:"
+    }
+    search_flow.add{
+        type = "textfield",
+        name = "recipe_picker_search_field"
+    }
+
     local drag_handle = frame.add{
         type = "flow",
         direction = "horizontal"
@@ -201,7 +234,7 @@ local function open_recipe_picker(player)
         column_count = 10,
         name = "recipe_grid"
     }
-
+    populate_recipe_grid(player, grid, nil)
 
     for name, recipe in pairs(player.force.recipes) do
         local sprite = get_product_sprite(recipe)
@@ -276,4 +309,18 @@ script.on_event(defines.events.on_gui_click, function(event)
         end
         return
     end
+end)
+script.on_event(defines.events.on_gui_text_changed, function(event)
+    local element = event.element
+    if not (element and element.valid and element.name == "recipe_picker_search_field") then return end
+
+    local player = game.get_player(event.player_index)
+    if not player then return end
+
+    local frame = element.parent.parent
+    local grid = frame.recipe_scroll.recipe_grid
+    if not grid then return end
+
+    local search_text = element.text
+    populate_recipe_grid(player, grid, search_text)
 end)
